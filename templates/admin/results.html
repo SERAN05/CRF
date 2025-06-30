@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Results | Course Feedback System{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h1>Feedback Results</h1>
+  <div class="mb-3">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+    </a>
+  </div>
+  <div class="mb-3">
+    <label for="staffSelect" class="form-label">Select Course/Staff</label>
+    <select id="staffSelect" class="form-select">
+      <option value="">Select</option>
+      {% for course in courses %}
+        {% for staff in course.staffs %}
+          <option value="{{ staff.id }}">{{ course.name }} - {{ staff.name }}</option>
+        {% endfor %}
+      {% endfor %}
+    </select>
+  </div>
+  <div id="chartContainer">
+    <canvas id="feedbackChart"></canvas>
+  </div>
+  <div class="mt-3">
+    <button id="downloadPdf" class="btn btn-outline-primary">Download PDF Report</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.js') }}"></script>
+<script>
+document.getElementById('staffSelect').addEventListener('change', function(){
+  var staffId = this.value;
+  if(staffId){
+    fetch('/admin/api/results/staff/' + staffId)
+      .then(response => response.json())
+      .then(data => { updateChart(data); });
+  }
+});
+document.getElementById('downloadPdf').addEventListener('click', function(){
+  var staffId = document.getElementById('staffSelect').value;
+  if(staffId){
+    window.location.href = '/admin/download_report/' + staffId;
+  } else {
+    alert("Please select a staff.");
+  }
+});
+</script>
+{% endblock %}

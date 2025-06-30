@@ -1,0 +1,15 @@
+body {
+    background-color: #e9f7ef;
+  }
+  .card.login-card {
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  .feedback-table {
+    margin-top: 20px;
+  }
+  .feedback-table th {
+    background-color: #28a745;
+    color: #fff;
+  }
+  

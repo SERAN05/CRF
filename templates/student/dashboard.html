@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard | Course Feedback System{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/student.css') }}">
+{% endblock %}
+{% block content %}
+<div class="container my-4">
+  <h1>Student Dashboard</h1>
+  {% if active_event %}
+    {% if not has_submitted %}
+      <div class="alert alert-info">
+        <strong>Live Event:</strong> {{ active_event.title }}
+        <p>{{ active_event.description }}</p>
+        <a href="{{ url_for('student.feedback_form') }}" class="btn btn-primary">Give Feedback</a>
+      </div>
+    {% else %}
+      <div class="alert alert-success">You have already submitted feedback for the live event.</div>
+    {% endif %}
+  {% else %}
+    <div class="alert alert-warning">No live events are currently available.</div>
+  {% endif %}
+</div>
+{% endblock %}

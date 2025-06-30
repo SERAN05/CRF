@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Feedback Form | Course Feedback System{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/student.css') }}">
+<style>
+  .feedback-table { width: 100%; border-collapse: collapse; }
+  .feedback-table th, .feedback-table td { border: 1px solid #dee2e6; padding: 8px; text-align: center; }
+  .error { color: red; font-weight: bold; }
+  .glow-warning {
+    background: #ffc107;
+    color: #212529;
+    text-align: center;
+    font-weight: bold;
+    padding: 12px 0;
+    font-size: 1.2rem;
+    border-radius: 6px;
+    margin-bottom: 18px;
+  }
+  .glow-text {
+    color: #d35400;
+    font-weight: bold;
+    animation: glow 1s infinite alternate;
+  }
+  @keyframes glow {
+    from { text-shadow: 0 0 4px #ffc107, 0 0 8px #ff9800; }
+    to { text-shadow: 0 0 16px #ff9800, 0 0 8px #ffc107; }
+  }
+  .modal {
+    display: block; /* Hidden by default, shown on load */
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+  }
+  .modal-content {
+    background-color: #fff3cd;
+    margin: 10% auto;
+    padding: 30px 24px 18px 24px;
+    border: 2px solid #ffc107;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 10px;
+    text-align: center;
+  }
+  .modal-warning-banner {
+    background: #ff9800;
+    color: #fff;
+    font-weight: bold;
+    padding: 10px 0;
+    border-radius: 6px 6px 0 0;
+    font-size: 1.1rem;
+    margin-bottom: 18px;
+  }
+  .proceed-btn {
+    background: #ffc107;
+    color: #212529;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 5px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-top: 18px;
+    transition: background 0.2s;
+  }
+  .proceed-btn:hover {
+    background: #ff9800;
+    color: #fff;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="glow-warning"><span class="glow-text">WARNING</span>: {{ event.warning_message or 'This feedback is for the specified class only' }}</div>
+<div class="container my-4">
+  <h2>Feedback Form: {{ event.title }}</h2>
+  <form id="feedbackForm" action="{{ url_for('student.feedback_form') }}" method="post">
+    <div class="mb-3">
+      <h4>Select Staff for Each Course</h4>
+      <div class="row">
+        {% for course in courses %}
+          <div class="col-md-3 mb-3">
+            <label for="staff_{{ course.id }}">{{ course.name }}</label>
+            <select name="staff_{{ course.id }}" id="staff_{{ course.id }}" class="form-select" required>
+              <option value="">Select Staff</option>
+              {% for staff in course_staffs[course.id] %}
+                <option value="{{ staff.id }}">{{ staff.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="mb-3">
+      <h4>Rate Each Question (1: Poor, 2: Fair, 3: Good, 4: Very Good)</h4>
+      <table class="feedback-table">
+        <thead>
+          <tr>
+            <th>Question</th>
+            {% for course in courses %}
+              <th>{{ course.name }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for question in questions %}
+            <tr>
+              <td>{{ question.text }}</td>
+              {% for course in courses %}
+                <td>
+                  <select name="rating_{{ course.id }}_0_{{ question.id }}" class="form-select answer-dropdown" required>
+                    <option value="">Select</option>
+                    {% for i in range(1,5) %}
+                      <option value="{{ i }}">{{ i }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div id="errorMsg" class="error" style="display:none;">Please answer all questions before submission.</div>
+    </div>
+    <div class="d-grid">
+      <button type="submit" class="btn btn-success btn-lg" id="submitFeedback">Submit Feedback</button>
+    </div>
+  </form>
+</div>
+<!-- Modal Popup -->
+<div id="warningModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-warning-banner"><span class="glow-text">WARNING</span></div>
+    <div style="margin: 18px 0 12px 0; font-size: 1.1rem; color: #212529;">
+      {{ event.warning_message or 'This is for the specified class only.' }}
+    </div>
+    <button class="proceed-btn" id="proceedBtn">Proceed</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/student.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Modal logic
+  var modal = document.getElementById('warningModal');
+  var proceedBtn = document.getElementById('proceedBtn');
+  document.body.style.overflow = 'hidden';
+  proceedBtn.focus();
+  proceedBtn.onclick = function() {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  };
+  // Prevent form interaction until modal is closed
+  document.getElementById('feedbackForm').style.pointerEvents = 'none';
+  proceedBtn.addEventListener('click', function() {
+    document.getElementById('feedbackForm').style.pointerEvents = '';
+  });
+});
+document.getElementById('feedbackForm').addEventListener('submit', function(e){
+  var dropdowns = document.querySelectorAll('.answer-dropdown');
+  for (var i = 0; i < dropdowns.length; i++) {
+    if (!dropdowns[i].value) {
+      e.preventDefault();
+      document.getElementById('errorMsg').style.display = 'block';
+      return false;
+    }
+  }
+});
+</script>
+{% endblock %}
