@@ -71,6 +71,25 @@
     </div>
   </div>
 
+  <!-- Bulk Upload Courses & Staff -->
+  <div class="card mb-4">
+    <div class="card-header bg-primary text-white">Bulk Upload Courses & Staff</div>
+    <div class="card-body">
+      <form action="{{ url_for('admin.manage_courses') }}" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="action" value="upload_courses">
+        <div class="mb-3">
+          <label for="file" class="form-label">Upload Excel File (.xls, .xlsx)</label>
+          <input type="file" name="file" id="file" class="form-control" accept=".xls,.xlsx" required>
+        </div>
+        <button type="submit" class="btn btn-success">Upload</button>
+      </form>
+      <div class="form-text mt-2">
+        <b>Expected columns:</b> Course Code, Course Name, Teacher Name<br>
+        You can have multiple rows with the same course code/name and different teacher names.
+      </div>
+    </div>
+  </div>
+
   <!-- Existing Courses & Staffs -->
   <h2>Existing Courses</h2>
   {% if courses %}

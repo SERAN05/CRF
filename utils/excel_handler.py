@@ -43,3 +43,43 @@ def validate_student_excel(file):
         return True, f"Successfully processed {len(valid_data)} student records", valid_data
     except Exception as e:
         return False, f"Error processing Excel file: {str(e)}", []
+
+def validate_course_staff_excel(file):
+    """
+    Validate and process an Excel file containing course and staff data.
+    
+    Expected format:
+    - Column 1: Course Code
+    - Column 2: Course Name
+    - Column 3: Teacher Name
+    
+    Returns:
+    - success (bool), message (str), data (list of tuples: (course_code, course_name, teacher_name))
+    """
+    try:
+        df = pd.read_excel(file)
+        if len(df.columns) < 3:
+            return False, "Excel file must have at least three columns: Course Code, Course Name, Teacher Name", []
+        code_col = df.columns[0]
+        name_col = df.columns[1]
+        teacher_col = df.columns[2]
+        valid_data = []
+        errors = []
+        for index, row in df.iterrows():
+            course_code = str(row[code_col]).strip()
+            course_name = str(row[name_col]).strip()
+            teacher_name = str(row[teacher_col]).strip()
+            if not course_code or not course_name or not teacher_name:
+                errors.append(f"Row {index+2}: Missing data (Course Code, Name, or Teacher Name)")
+                continue
+            valid_data.append((course_code, course_name, teacher_name))
+        if not valid_data:
+            return False, "No valid course/staff data found in the file", []
+        if errors:
+            error_message = f"Processed with {len(errors)} errors:\n" + "\n".join(errors[:5])
+            if len(errors) > 5:
+                error_message += f"\n...and {len(errors)-5} more errors"
+            return True, error_message, valid_data
+        return True, f"Successfully processed {len(valid_data)} records", valid_data
+    except Exception as e:
+        return False, f"Error processing Excel file: {str(e)}", []

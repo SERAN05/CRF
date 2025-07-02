@@ -7,9 +7,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, inspect
 from myextensions import db
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 
 from models import User, Student, Event, Course, Staff, Question, FeedbackResponse, QuestionResponse
-from utils.excel_handler import allowed_file, validate_student_excel
+from utils.excel_handler import allowed_file, validate_student_excel, validate_course_staff_excel
 from utils.pdf_generator import generate_pdf_report
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -31,8 +35,7 @@ def safe_filter(query_obj):
 
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated and current_user.is_admin:
-        return redirect(url_for('admin.dashboard'))
+    # Always require credentials, even if already authenticated
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -58,19 +61,22 @@ def dashboard():
     if not current_user.is_admin:
         flash('Access denied. You must be an admin to view this page.', 'danger')
         return redirect(url_for('admin.login'))
-    # Use safe_filter so that if is_deleted column is not present, we fall back to all events.
     events = safe_filter(Event.query).all()
     courses = Course.query.all()
     total_students = Student.query.count()
     total_responses = FeedbackResponse.query.count()
     active_event = safe_filter(Event.query.filter_by(is_active=True)).first()
+    event_responses = 0
     completion_rate = 0
+    students = Student.query.order_by(Student.roll_number).all()
+    responded_ids = set([r[0] for r in db.session.query(FeedbackResponse.student_id).filter_by(event_id=active_event.id).distinct().all()]) if active_event else set()
     if total_students > 0 and active_event:
-        event_responses = FeedbackResponse.query.filter_by(event_id=active_event.id).count()
+        event_responses = db.session.query(FeedbackResponse.student_id).filter_by(event_id=active_event.id).distinct().count()
         completion_rate = (event_responses / total_students) * 100
     return render_template('admin/dashboard.html', events=events, courses=courses,
                            total_students=total_students, total_responses=total_responses,
-                           active_event=active_event, completion_rate=completion_rate)
+                           active_event=active_event, completion_rate=completion_rate, event_responses=event_responses,
+                           students=students, responded_ids=responded_ids)
 
 @admin_bp.route('/events', methods=['GET', 'POST'])
 @login_required
@@ -171,10 +177,14 @@ def manage_courses():
             if not course_id or not staff_name:
                 flash('Course and staff name are required', 'danger')
                 return redirect(url_for('admin.manage_courses'))
-            staff = Staff(name=staff_name, course_id=course_id)
-            db.session.add(staff)
-            db.session.commit()
-            flash('Staff added successfully', 'success')
+            staff = Staff.query.get_or_404(course_id)
+            if FeedbackResponse.query.filter_by(course_id=staff.course_id).count() > 0:
+                flash('Cannot add staff to course with existing responses', 'danger')
+            else:
+                staff = Staff(name=staff_name, course_id=staff.course_id)
+                db.session.add(staff)
+                db.session.commit()
+                flash('Staff added successfully', 'success')
         elif action == 'delete_course':
             course_id = request.form.get('course_id')
             course = Course.query.get_or_404(course_id)
@@ -194,6 +204,40 @@ def manage_courses():
                 db.session.delete(staff)
                 db.session.commit()
                 flash('Staff deleted successfully', 'success')
+        elif action == 'upload_courses':
+            if 'file' not in request.files:
+                flash('No file part', 'danger')
+                return redirect(request.url)
+            file = request.files['file']
+            if file.filename == '':
+                flash('No selected file', 'danger')
+                return redirect(request.url)
+            if file and allowed_file(file.filename):
+                try:
+                    success, message, data = validate_course_staff_excel(file)
+                    if not success:
+                        flash(message, 'danger')
+                        return redirect(request.url)
+                    added_courses = 0
+                    added_staff = 0
+                    for course_code, course_name, teacher_name in data:
+                        course = Course.query.filter_by(code=course_code, name=course_name).first()
+                        if not course:
+                            course = Course(code=course_code, name=course_name)
+                            db.session.add(course)
+                            db.session.commit()
+                            added_courses += 1
+                        staff = Staff.query.filter_by(name=teacher_name, course_id=course.id).first()
+                        if not staff:
+                            staff = Staff(name=teacher_name, course_id=course.id)
+                            db.session.add(staff)
+                            db.session.commit()
+                            added_staff += 1
+                    flash(f"{message}. Added {added_courses} new courses and {added_staff} new staff.", 'success')
+                except Exception as e:
+                    flash(f'Error processing file: {str(e)}', 'danger')
+            else:
+                flash('Invalid file type. Please upload an Excel file (.xls, .xlsx)', 'danger')
     courses = Course.query.all()
     return render_template('admin/manage_courses.html', courses=courses)
 
@@ -288,8 +332,11 @@ def results():
     courses = Course.query.all()
     staffs = Staff.query.all()
     questions = Question.query.all()
+    students = Student.query.order_by(Student.roll_number).all()
+    responded_ids = set([r[0] for r in db.session.query(FeedbackResponse.student_id).filter_by(event_id=active_event.id).distinct().all()]) if active_event else set()
     return render_template('admin/results.html', active_event=active_event,
-                           courses=courses, staffs=staffs, questions=questions)
+                           courses=courses, staffs=staffs, questions=questions,
+                           students=students, responded_ids=responded_ids)
 
 @admin_bp.route('/api/results/staff/<int:staff_id>')
 @login_required
@@ -363,3 +410,49 @@ def download_report(staff_id):
     filename = f"report_{staff.course.code}_{staff.name.replace(' ', '_')}_{event.title.replace(' ', '_')}.pdf"
     return send_file(BytesIO(pdf_buffer.getvalue()), mimetype='application/pdf',
                      as_attachment=True, download_name=filename)
+
+@admin_bp.route('/download_student_responses_pdf')
+@login_required
+def download_student_responses_pdf():
+    if not current_user.is_admin:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+    try:
+        active_event = Event.query.filter_by(is_active=True, is_deleted=False).first()
+    except Exception:
+        active_event = Event.query.filter_by(is_active=True).first()
+    students = Student.query.order_by(Student.roll_number).all()
+    responded_ids = set([r[0] for r in db.session.query(FeedbackResponse.student_id).filter_by(event_id=active_event.id).distinct().all()]) if active_event else set()
+    # Prepare data for PDF
+    data = [['S.No', 'Roll Number', 'Name', 'Response']]
+    for idx, student in enumerate(students, 1):
+        response = 'Yes' if student.id in responded_ids else 'No'
+        data.append([str(idx), student.roll_number, student.name, response])
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+    style = getSampleStyleSheet()["Normal"]
+    table = Table(data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#007bff')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 12),
+        ('FONTSIZE', (0,1), (-1,-1), 10),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.lightgrey]),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+    ]))
+    event_title = active_event.title if active_event else 'No Event'
+    event_date = active_event.created_at.strftime('%Y-%m-%d') if active_event and active_event.created_at else ''
+    pdf_title = f'Student Response Status - {event_title} ({event_date})'
+    elements = [Paragraph(pdf_title, style), table]
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name='student_responses.pdf')
+
+# Route to force logout (for use when leaving admin area)
+@admin_bp.route('/force_logout')
+def force_logout():
+    logout_user()
+    flash("Session ended. Please log in again to access the admin panel.", "info")
+    return redirect(url_for('index'))
