@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="height: 100%;">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,14 +9,15 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
   {% block styles %}{% endblock %}
 </head>
-<body>
-  <div class="container-fluid">
+<body style="min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; height: 100%;">
+  <div class="container-fluid" style="flex: 1 1 auto; display: flex; flex-direction: column;">
     <div class="row">
       {% block navbar %}
       <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
           <a class="navbar-brand" href="#">
-            <i class="fas fa-clipboard-check me-2"></i>Course Feedback System
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" style="height:38px; margin-right:10px; vertical-align:middle;">
+            Course Feedback System
           </a>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
@@ -46,7 +47,7 @@
             {% endfor %}
           {% endif %}
         {% endwith %}
-        <div class="main-content">
+        <div class="main-content" style="flex: 1 0 auto;">
           {% block content %}
           <div class="text-center my-5">
             <h1>Welcome to Course Feedback System</h1>
@@ -82,9 +83,12 @@
         </div>
       </div>
     </div>
-    <footer class="footer mt-5 py-3 bg-light">
+    <footer class="footer py-3 bg-light border-top" style="flex-shrink: 0; margin-top: 0;">
       <div class="container text-center">
-        <span class="text-muted">© 2025 Course Feedback – SREC</span>
+        <span class="text-muted" style="font-size: 1rem; letter-spacing: 0.5px;">
+          © 2025 Sri Ramakrishna Engineering College (Autonomous). All Rights Reserved.<br>
+          <a href="#" style="font-size: 0.95rem; color: #0d6efd; text-decoration: underline;">Course Feedback System</a>
+        </span>
       </div>
     </footer>
   </div>

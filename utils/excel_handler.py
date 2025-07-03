@@ -8,31 +8,38 @@ def validate_student_excel(file):
     """
     Validate and process an Excel file containing student data.
     
-    Expected format:
-    - Column 1: Roll Number (must start with 718123 and be 11 digits)
-    - Column 2: Student Name
+    Expected columns (case-insensitive):
+    - 'ROLL NO.'
+    - 'Student Name'
+    - 'Email Address'
     
     Returns:
-    - success (bool), message (str), students_data (list of tuples)
+    - success (bool), message (str), students_data (list of tuples: (roll_number, name, email))
     """
     try:
         df = pd.read_excel(file)
-        if len(df.columns) < 2:
-            return False, "Excel file must have at least two columns", []
-        roll_column = df.columns[0]
-        name_column = df.columns[1]
+        # Normalize column names
+        df.columns = [str(col).strip().lower() for col in df.columns]
+        required_cols = ['roll no.', 'student name', 'email address']
+        for col in required_cols:
+            if col not in df.columns:
+                return False, f"Missing required column: {col}", []
         valid_data = []
         errors = []
         for index, row in df.iterrows():
-            roll_number = str(row[roll_column]).strip()
-            name = str(row[name_column]).strip()
+            roll_number = str(row['roll no.']).strip()
+            name = str(row['student name']).strip()
+            email = str(row['email address']).strip()
             if not roll_number.startswith('718123') or len(roll_number) != 11 or not roll_number.isdigit():
                 errors.append(f"Row {index+2}: Invalid roll number format '{roll_number}'")
                 continue
             if not name:
                 errors.append(f"Row {index+2}: Missing student name")
                 continue
-            valid_data.append((roll_number, name))
+            if not email or '@' not in email:
+                errors.append(f"Row {index+2}: Invalid or missing email address")
+                continue
+            valid_data.append((roll_number, name, email))
         if not valid_data:
             return False, "No valid student data found in the file", []
         if errors:

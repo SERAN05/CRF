@@ -26,9 +26,10 @@ class Student(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     roll_number = db.Column(db.String(20), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
     password_hash = db.Column(db.String(128), nullable=False,
                               default=generate_password_hash('Srec@123'))
-    feedback_responses = db.relationship('FeedbackResponse', backref='student', lazy=True)
+    feedback_responses = db.relationship('FeedbackResponse', backref='student', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -83,7 +84,7 @@ class Question(db.Model):
 
 class FeedbackResponse(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete='CASCADE'), nullable=False)
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
     course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)

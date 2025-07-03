@@ -11,6 +11,8 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
+import io
+import zipfile
 
 from models import User, Student, Event, Course, Staff, Question, FeedbackResponse, QuestionResponse
 from utils.excel_handler import allowed_file, validate_student_excel, validate_course_staff_excel
@@ -263,14 +265,16 @@ def manage_students():
                     if not success:
                         flash(message, 'danger')
                         return redirect(request.url)
-                    for roll_number, name in students_data:
+                    for roll_number, name, email in students_data:
                         existing_student = Student.query.filter_by(roll_number=roll_number).first()
                         if existing_student:
                             existing_student.name = name
+                            existing_student.email = email
                         else:
                             new_student = Student(
                                 roll_number=roll_number,
                                 name=name,
+                                email=email,
                                 password_hash=generate_password_hash('Srec@123')
                             )
                             db.session.add(new_student)
@@ -307,15 +311,11 @@ def manage_students():
         elif action == 'delete_all':
             students = Student.query.all()
             count_deleted = 0
-            count_skipped = 0
             for s in students:
-                if FeedbackResponse.query.filter_by(student_id=s.id).count() == 0:
-                    db.session.delete(s)
-                    count_deleted += 1
-                else:
-                    count_skipped += 1
+                db.session.delete(s)
+                count_deleted += 1
             db.session.commit()
-            flash(f"Deleted {count_deleted} students. {count_skipped} not deleted (existing responses).", "success")
+            flash(f"Deleted {count_deleted} students.", "success")
     students = Student.query.all()
     return render_template('admin/manage_students.html', students=students)
 
@@ -449,6 +449,54 @@ def download_student_responses_pdf():
     doc.build(elements)
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name='student_responses.pdf')
+
+@admin_bp.route('/download_all_reports')
+@login_required
+def download_all_reports():
+    if not current_user.is_admin:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('admin.login'))
+    # Get all staff for the active event
+    try:
+        active_event = Event.query.filter_by(is_active=True, is_deleted=False).first()
+    except Exception:
+        active_event = Event.query.filter_by(is_active=True).first()
+    if not active_event:
+        flash('No active event found.', 'danger')
+        return redirect(url_for('admin.results'))
+    staffs = Staff.query.all()
+    # Create a zip of PDFs
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zipf:
+        for staff in staffs:
+            pdf_buffer = generate_pdf_report(staff.id, event_id=active_event.id)
+            pdf_buffer.seek(0)
+            filename = f"report_{staff.course.code}_{staff.name.replace(' ', '_')}_{active_event.title.replace(' ', '_')}.pdf"
+            zipf.writestr(filename, pdf_buffer.read())
+    zip_buffer.seek(0)
+    return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name='all_staff_reports.zip')
+
+@admin_bp.route('/api/responses/<int:staff_id>')
+@login_required
+def api_responses(staff_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Access denied'}), 403
+    staff = Staff.query.get_or_404(staff_id)
+    try:
+        active_event = Event.query.filter_by(is_active=True, is_deleted=False).first()
+    except Exception:
+        active_event = Event.query.filter_by(is_active=True).first()
+    if not active_event:
+        return jsonify({'error': 'No active event found'}), 404
+    feedbacks = FeedbackResponse.query.filter_by(staff_id=staff_id, event_id=active_event.id).all()
+    responses = []
+    for fb in feedbacks:
+        student = Student.query.get(fb.student_id)
+        # Collect all question responses as a string
+        q_resps = QuestionResponse.query.filter_by(feedback_id=fb.id).all()
+        resp_text = '; '.join([f"{qr.question.text}: {qr.rating}" for qr in q_resps])
+        responses.append({'student_name': student.name, 'response': resp_text})
+    return jsonify({'responses': responses})
 
 # Route to force logout (for use when leaving admin area)
 @admin_bp.route('/force_logout')
